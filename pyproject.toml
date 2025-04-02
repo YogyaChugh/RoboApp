@@ -1,0 +1,14 @@
+[tool.flet.splash]
+android = false
+
+[project]
+name = "RoboChan"
+version = "1.0.0"
+description = "Robot Control App"
+authors = [
+  {name = "Yogya Chugh", email = "yogya.developer@gmail.com"}
+]
+
+[tool.flet.android]
+adaptive_icon_background = "assets/logo.jpg" # --android-adaptive-icon-background
+split_per_abi = false # --split-per-abi
