@@ -1,115 +1,232 @@
 from flet import *
 import math
+import folium
+import json
+import googletrans
+import time
+from gtts import gTTS
+import soundfile as sf
+import sounddevice as sd
+import numpy as np
+import tempfile
+DONE = False
+LANGUAGES_DICT={}
 
-LANGUAGES = {
-    'af': 'afrikaans',
-    'sq': 'albanian',
-    'am': 'amharic',
-    'ar': 'arabic',
-    'hy': 'armenian',
-    'az': 'azerbaijani',
-    'eu': 'basque',
-    'be': 'belarusian',
-    'bn': 'bengali',
-    'bs': 'bosnian',
-    'bg': 'bulgarian',
-    'ca': 'catalan',
-    'ceb': 'cebuano',
-    'ny': 'chichewa',
-    'zh-cn': 'chinese (simplified)',
-    'zh-tw': 'chinese (traditional)',
-    'co': 'corsican',
-    'hr': 'croatian',
-    'cs': 'czech',
-    'da': 'danish',
-    'nl': 'dutch',
-    'en': 'english',
-    'eo': 'esperanto',
-    'et': 'estonian',
-    'tl': 'filipino',
-    'fi': 'finnish',
-    'fr': 'french',
-    'fy': 'frisian',
-    'gl': 'galician',
-    'ka': 'georgian',
-    'de': 'german',
-    'el': 'greek',
-    'gu': 'gujarati',
-    'ht': 'haitian creole',
-    'ha': 'hausa',
-    'haw': 'hawaiian',
-    'iw': 'hebrew',
-    'he': 'hebrew',
-    'hi': 'hindi',
-    'hmn': 'hmong',
-    'hu': 'hungarian',
-    'is': 'icelandic',
-    'ig': 'igbo',
-    'id': 'indonesian',
-    'ga': 'irish',
-    'it': 'italian',
-    'ja': 'japanese',
-    'jw': 'javanese',
-    'kn': 'kannada',
-    'kk': 'kazakh',
-    'km': 'khmer',
-    'ko': 'korean',
-    'ku': 'kurdish (kurmanji)',
-    'ky': 'kyrgyz',
-    'lo': 'lao',
-    'la': 'latin',
-    'lv': 'latvian',
-    'lt': 'lithuanian',
-    'lb': 'luxembourgish',
-    'mk': 'macedonian',
-    'mg': 'malagasy',
-    'ms': 'malay',
-    'ml': 'malayalam',
-    'mt': 'maltese',
-    'mi': 'maori',
-    'mr': 'marathi',
-    'mn': 'mongolian',
-    'my': 'myanmar (burmese)',
-    'ne': 'nepali',
-    'no': 'norwegian',
-    'or': 'odia',
-    'ps': 'pashto',
-    'fa': 'persian',
-    'pl': 'polish',
-    'pt': 'portuguese',
-    'pa': 'punjabi',
-    'ro': 'romanian',
-    'ru': 'russian',
-    'sm': 'samoan',
-    'gd': 'scots gaelic',
-    'sr': 'serbian',
-    'st': 'sesotho',
-    'sn': 'shona',
-    'sd': 'sindhi',
-    'si': 'sinhala',
-    'sk': 'slovak',
-    'sl': 'slovenian',
-    'so': 'somali',
-    'es': 'spanish',
-    'su': 'sundanese',
-    'sw': 'swahili',
-    'sv': 'swedish',
-    'tg': 'tajik',
-    'ta': 'tamil',
-    'te': 'telugu',
-    'th': 'thai',
-    'tr': 'turkish',
-    'uk': 'ukrainian',
-    'ur': 'urdu',
-    'ug': 'uyghur',
-    'uz': 'uzbek',
-    'vi': 'vietnamese',
-    'cy': 'welsh',
-    'xh': 'xhosa',
-    'yi': 'yiddish',
-    'yo': 'yoruba',
-    'zu': 'zulu',
-}
+def translation_page_column(page):
+    returning_column = Column()
+    stackbro = Stack()
+    #Function to return all languages in form of drop-down
+    def get_options():
+        options = []
+        with open('assets/languages.json') as f:
+            LANGUAGES = json.load(f)['LANGUAGES']
+            for lang in LANGUAGES:
+                options.append(
+                    DropdownOption(
+                        key=LANGUAGES[lang].capitalize(),
+                        content=Text(
+                            value=LANGUAGES[lang].capitalize()
+                        ),
+                    )
+                )
+                global LANGUAGES_DICT
+                LANGUAGES_DICT[LANGUAGES[lang]]=lang
+        return options
+    
+    text_field_part_1=TextField(
+                    autocorrect=True,
+                    border_radius=10,
+                    capitalization=TextCapitalization.SENTENCES,
+                    enable_suggestions=True,
+                    hint_text="Enter some text here ....",
+                    min_lines=4,
+                    multiline=True,
+                    bgcolor="#ffffff",
+                    border="none"
+                )
+    text_field_part_2 = TextField(
+                    autocorrect=True,
+                    border_radius=10,
+                    capitalization=TextCapitalization.SENTENCES,
+                    enable_suggestions=True,
+                    value="Translated Text will appear here ....",
+                    min_lines=4,
+                    multiline=True,
+                    bgcolor="#ffffff",
+                    border="none",
+                    read_only=True
+                )
+    
+    language_dropdown_1 = Dropdown(
+                        editable=True,
+                        label="Language",
+                        options=get_options(),
+                        enable_filter=True,
+                        enable_search=True,
+                        menu_height=200,
+                        width=150,
+                        bgcolor="#ffffff"
+                    )
+    language_dropdown_2 = Dropdown(
+                        editable=True,
+                        label="Language",
+                        options=get_options(),
+                        enable_filter=True,
+                        enable_search=True,
+                        menu_height=200,
+                        width=150,
+                        bgcolor="#ffffff"
+                    )
+    
+    def close_it(e):
+        page.close(dialog)
+    dialog = AlertDialog(
+            modal=True,
+            title=Row(
+                [
+                    Icon(Icons.INFO_OUTLINE, color=Colors.BLUE_500),
+                    Text("Information", weight=FontWeight.BOLD)
+                ]
+            ),
+            content=Text(
+                "Please enter some text for\ntranslation to the specified language",
+                text_align=TextAlign.CENTER,
+            ),
+            actions=[
+                TextButton("OK",on_click=close_it)
+            ],
+            actions_alignment=MainAxisAlignment.CENTER,
+            shape=RoundedRectangleBorder(radius=15),
+        )
+    loading = Lottie(
+        src="https://lottie.host/e56fe72a-4567-4195-8fd9-0b2b7cf07fc5/PS40sQkMiL.json",
+        reverse=False,
+        animate=True,
+    )
+    loading = Column(
+        [loading],
+        alignment=MainAxisAlignment.END,  # Vertical centering
+        horizontal_alignment=CrossAxisAlignment.CENTER  # Horizontal centering
+    )
+    def process_translate(e):
+        global LANGUAGES_DICT
+        translator = googletrans.Translator()
+        if language_dropdown_2.value==None:
+            dialog.content.value="Please specify the target language\nfor translation."
+            page.open(dialog)
+            return
+        elif text_field_part_1.value=="":
+            dialog.content.value="Please enter some text for\ntranslation to the specified language"
+            page.open(
+                dialog
+            )
+            return
+        temp = ""
+        stackbro.controls.append(loading)
+        page.update()
+        if language_dropdown_1.value==None:
+            temp = translator.translate(text_field_part_1.value,dest=LANGUAGES_DICT[str(language_dropdown_2.value.lower())])
+        else:
+            temp = translator.translate(text_field_part_1.value,src=LANGUAGES_DICT[str(language_dropdown_1.value.lower())],dest=LANGUAGES_DICT[str(language_dropdown_2.value.lower())])
+        stackbro.controls.remove(loading)
+        text_field_part_2.value = temp.text
+        page.update()
+
+    #Row containing the main translator
+    carder = Row(
+            [
+                Container(
+                    language_dropdown_1,
+                    bgcolor="#ffffff",
+                ),
+                Icon(Icons.SWAP_HORIZ_OUTLINED),
+                Container(
+                    language_dropdown_2,
+                    bgcolor="#ffffff",
+                )
+            ],
+            alignment=MainAxisAlignment.SPACE_BETWEEN
+        )
+    
+    #Container for translation
+    centered_layout = Container(
+        content=carder,
+        alignment=alignment.center,  # Centers the content inside
+        expand=True,  # Ensures full-screen usage
+    )
+
+    def copy(e):
+        page.set_clipboard(text_field_part_2.value)
+
+    def speak(e):
+        text = text_field_part_2.value
+        lang = LANGUAGES_DICT[language_dropdown_2.value.lower()]
+    
+        tts = gTTS(text, lang=lang)
+    
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+            temp_audio_path = temp_audio.name  # Get temp file path
+            temp_audio.close()  # Close the file before writing
+    
+            tts.save(temp_audio_path)  # Now save works
+    
+        print(f"Saved at: {temp_audio_path}")  # Debugging
+    text_field = Container(
+        Column(
+            [
+                text_field_part_1,
+                Divider(height=20, thickness=2, color="grey"),
+                Row(
+                    [
+                        Row(
+                            [IconButton(Icons.CAMERA_ALT), IconButton(Icons.MIC)],
+                            tight=True
+                        ),
+                        ElevatedButton("Translate",style=ButtonStyle(color="#ffffff",bgcolor="#000055",padding=Padding(10,10,10,10)),on_click=process_translate)
+                    ],
+                    alignment=MainAxisAlignment.SPACE_BETWEEN  # Ensures left & right positioning
+                )
+            ]
+        ),
+        border_radius=5,
+        padding=8,
+        bgcolor="#ffffff"
+    )
+    text_field_2 = Container(
+        Column(
+            [
+                text_field_part_2,
+                Divider(height=20, thickness=2, color="grey"),
+                Row(
+                    [
+                        Row(
+                            [IconButton(Icons.COPY,on_click=copy), IconButton(Icons.VOLUME_UP_OUTLINED,on_click=speak)],
+                            tight=True
+                        )
+                    ],
+                    alignment=MainAxisAlignment.SPACE_BETWEEN  # Ensures left & right positioning
+                )
+            ]
+        ),
+        border_radius=5,
+        padding=8,
+        bgcolor="#ffffff"
+    )
+    returning_column.controls.append(centered_layout)
+    returning_column.controls.append(text_field)
+    returning_column.controls.append(text_field_2)
+    stackbro.controls.append(returning_column)
+    return stackbro
+
+def translation_page_appbar():
+    translation_app_bar = AppBar(
+        leading=Icon(Icons.G_TRANSLATE_OUTLINED),
+        leading_width=50,
+        title= Text("Translate"),
+        center_title=False,
+        bgcolor="#ffffff"
+    )
+    return translation_app_bar
 
 def main(page: Page):
     page.title="RoboControl"
@@ -145,12 +262,13 @@ def main(page: Page):
         bgcolor="#ffffff"
     )
 
+    #Funcion for changing the selected index at bottom of page
     def change_the_nav_url(e):
         page.navigation_bar.selected_index=int(e.control.data)
         changedbro()
         page.update()
 
-    # Card For Home Page
+    #Welcome Card For Home Page
     home_card = Card(
         content= Container(
             content= Column(
@@ -165,7 +283,7 @@ def main(page: Page):
         color="#080e0a"
     )
 
-    #Container containing navigation for different pages
+    #Container containing navigation for different pages #ON HOME PAGE
     home_part2 = Container(
         margin=10,
         content = Column(
@@ -238,110 +356,10 @@ def main(page: Page):
         )
     )
 
-    #Card for Robot | Which Robot bro ??
-    robot_card = Container(
-        Row(
-            [
-                Text("Robot 01"),
-                ElevatedButton("Connect")
-            ],
-        ),
-        bgcolor="#FFB0BEC5"
-    )
-
-    #Function to return all languages in form of drop-down
-    def get_options():
-        options = []
-        for lang in LANGUAGES:
-            options.append(
-                DropdownOption(
-                    key=LANGUAGES[lang].capitalize(),
-                    content=Text(
-                        value=LANGUAGES[lang].capitalize()
-                    ),
-                )
-            )
-        return options
-
-    #Row containing the main translator
-    carder = Row(
-            [
-                Container(
-                    Dropdown(
-                        editable=True,
-                        label="Language",
-                        options=get_options(),
-                        enable_filter=True,
-                        enable_search=True,
-                        menu_height=200,
-                        width=150,
-                        bgcolor="#ffffff"
-                    ),
-                    bgcolor="#ffffff",
-                    border_radius=4
-                ),
-                IconButton(Icons.SWAP_HORIZ_OUTLINED,adaptive=True,bgcolor="#ffffff"),
-                Container(
-                    Dropdown(
-                        editable=True,
-                        label="Language",
-                        options=get_options(),
-                        enable_filter=True,
-                        enable_search=True,
-                        menu_height=200,
-                        width=150,
-                        bgcolor="#ffffff"
-                    ),
-                    bgcolor="#ffffff",
-                    border_radius=4
-                )
-            ],
-            alignment=MainAxisAlignment.CENTER
-        )
-    
-    #Container for translation
-    centered_layout = Container(
-        content=carder,
-        alignment=alignment.center,  # Centers the content inside
-        expand=True,  # Ensures full-screen usage
-    )
-    
-    translation_app_bar = AppBar(
-        leading=Icon(Icons.G_TRANSLATE_OUTLINED),
-        leading_width=50,
-        title= Text("Translate"),
-        center_title=False,
-        bgcolor="#ffffff"
-    )
-
-    text_field = Column(
-        [
-            TextField(
-                autocorrect=True,
-                border_radius=10,
-                capitalization=TextCapitalization.SENTENCES,
-                enable_suggestions=True,
-                hint_text="Enter some text here ....",
-                min_lines=4,
-                multiline=True,
-                bgcolor="#ffffff",
-                border="none"
-            ),
-            Divider(height=20, thickness=2, color="black")
-        ]
-    )
-    text_field = Container(
-        text_field,
-        border=border.all(2, "gray"),  # Outer border like a TextField
-        border_radius=5,
-        padding=8,
-        bgcolor="#ffffff"
-    )
     #Dictionary containing all page_contents dude
     page_contents = {
         0: Column(controls=[home_card,home_part2]),
-        1: Column(controls=[robot_card]),
-        3: Column([centered_layout,text_field])
+        3: translation_page_column(page)
     }
 
     #function to set changed page
@@ -351,7 +369,7 @@ def main(page: Page):
         if page.navigation_bar.selected_index!=0:
             page.remove(home_appbar)
         if page.navigation_bar.selected_index==3:
-            page.add(translation_app_bar)
+            page.add(translation_page_appbar())
         page.update()
 
     page.navigation_bar.on_change = changedbro
