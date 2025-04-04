@@ -1,14 +1,15 @@
 from flet import *
+import flet_lottie as fl
+import flet_audio as fa
 import math
-import folium
 import json
-import googletrans
-import time
+from deep_translator import GoogleTranslator
 from gtts import gTTS
-import soundfile as sf
-import sounddevice as sd
-import numpy as np
 import tempfile
+import requests
+
+URL = "https://api-yct9.onrender.com/upload"
+FILE_PATH = "listened_audio.wav"
 DONE = False
 LANGUAGES_DICT={}
 
@@ -98,7 +99,7 @@ def translation_page_column(page):
             actions_alignment=MainAxisAlignment.CENTER,
             shape=RoundedRectangleBorder(radius=15),
         )
-    loading = Lottie(
+    loading = fl.Lottie(
         src="https://lottie.host/e56fe72a-4567-4195-8fd9-0b2b7cf07fc5/PS40sQkMiL.json",
         reverse=False,
         animate=True,
@@ -108,9 +109,47 @@ def translation_page_column(page):
         alignment=MainAxisAlignment.END,  # Vertical centering
         horizontal_alignment=CrossAxisAlignment.CENTER  # Horizontal centering
     )
+    ph = PermissionHandler()
+    page.overlay.append(ph)
+    page.update()
+    lottie_listening = Column([fl.Lottie("https://lottie.host/edf8944e-9765-45a3-b265-800be153dba4/QXUAumZWxI.json",fit=ImageFit.COVER)],width=70,height=50)
+
+    async def stop_recording(e):
+        text_field.content.controls[2].controls[0].controls.pop()
+        text_field.content.controls[2].controls[0].controls.pop()
+        text_field.content.controls[2].controls[0].controls.append(mic_start)
+        page.update()
+        try:
+            await audio_rec.stop_recording_async(10)
+        except Exception as e:
+            print(e)
+        with open(FILE_PATH, "rb") as f:
+            files = {"file": (FILE_PATH, f)}
+            try:
+                response = requests.post(URL, files=files)
+            except Exception as e:
+                print(e)
+            if 'error' in response:
+                page.update()
+                return
+            text_field_part_1.value = response.json()['text']
+            page.update()
+    async def start_recording(e):
+        if not await audio_rec.has_permission_async():
+            ph.request_permission(PermissionType.MICROPHONE)
+        text_field.content.controls[2].controls[0].controls.pop()
+        text_field.content.controls[2].controls[0].controls.append(mic_stop)
+        text_field.content.controls[2].controls[0].controls.append(lottie_listening)
+        page.update()
+        try:
+            await audio_rec.start_recording_async("listened_audio.wav")
+        except Exception as e:
+            print(e)
+        return
+    mic_start = IconButton(Icons.MIC,on_click=start_recording)
+    mic_stop = IconButton(Icons.MIC,on_click=stop_recording)
     def process_translate(e):
         global LANGUAGES_DICT
-        translator = googletrans.Translator()
         if language_dropdown_2.value==None:
             dialog.content.value="Please specify the target language\nfor translation."
             page.open(dialog)
@@ -124,12 +163,14 @@ def translation_page_column(page):
         temp = ""
         stackbro.controls.append(loading)
         page.update()
+        translated_text = ""
         if language_dropdown_1.value==None:
-            temp = translator.translate(text_field_part_1.value,dest=LANGUAGES_DICT[str(language_dropdown_2.value.lower())])
+            translator = GoogleTranslator(source="auto", target=LANGUAGES_DICT[language_dropdown_2.value.lower()])
         else:
-            temp = translator.translate(text_field_part_1.value,src=LANGUAGES_DICT[str(language_dropdown_1.value.lower())],dest=LANGUAGES_DICT[str(language_dropdown_2.value.lower())])
+            translator = GoogleTranslator(source=LANGUAGES_DICT[language_dropdown_1.value.lower()], target=LANGUAGES_DICT[language_dropdown_2.value.lower()])
+        translated_text = translator.translate(text_field_part_1.value)
         stackbro.controls.remove(loading)
-        text_field_part_2.value = temp.text
+        text_field_part_2.value = translated_text
         page.update()
 
     #Row containing the main translator
@@ -159,18 +200,21 @@ def translation_page_column(page):
         page.set_clipboard(text_field_part_2.value)
 
     def speak(e):
+        if text_field_part_2.value == "Translated Text will appear here ....":
+            return
+
         text = text_field_part_2.value
         lang = LANGUAGES_DICT[language_dropdown_2.value.lower()]
-    
+
+        # Generate speech and save to a temporary file
         tts = gTTS(text, lang=lang)
-    
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-            temp_audio_path = temp_audio.name  # Get temp file path
-            temp_audio.close()  # Close the file before writing
-    
-            tts.save(temp_audio_path)  # Now save works
-    
-        print(f"Saved at: {temp_audio_path}")  # Debugging
+        temp_audio_path = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False).name
+        tts.save(temp_audio_path)
+
+        # Play audio using Flet
+        page.add(fa.Audio(temp_audio_path,autoplay=True))
+        page.update()
+
     text_field = Container(
         Column(
             [
@@ -179,7 +223,7 @@ def translation_page_column(page):
                 Row(
                     [
                         Row(
-                            [IconButton(Icons.CAMERA_ALT), IconButton(Icons.MIC)],
+                            [mic_start],
                             tight=True
                         ),
                         ElevatedButton("Translate",style=ButtonStyle(color="#ffffff",bgcolor="#000055",padding=Padding(10,10,10,10)),on_click=process_translate)
@@ -212,6 +256,13 @@ def translation_page_column(page):
         padding=8,
         bgcolor="#ffffff"
     )
+
+    audio_rec = AudioRecorder(
+        audio_encoder=AudioEncoder.WAV
+    )
+    page.overlay.append(audio_rec)
+    page.update()
+
     returning_column.controls.append(centered_layout)
     returning_column.controls.append(text_field)
     returning_column.controls.append(text_field_2)
@@ -247,9 +298,7 @@ def main(page: Page):
             IconButton(Icons.PERSON_3,adaptive=True)
         ]
     )
-
-    #Navigation Bar at bottom of Page
-    page.navigation_bar = NavigationBar(
+    navbar=NavigationBar(
         destinations=[
             NavigationBarDestination(icon=Icons.HOME,label="Home"),
             NavigationBarDestination(icon=Icons.VIDEOGAME_ASSET_ROUNDED,label="Control"),
@@ -261,6 +310,9 @@ def main(page: Page):
         selected_index=0,
         bgcolor="#ffffff"
     )
+
+    #Navigation Bar at bottom of Page
+    page.navigation_bar = navbar
 
     #Funcion for changing the selected index at bottom of page
     def change_the_nav_url(e):
@@ -359,72 +411,79 @@ def main(page: Page):
     #Dictionary containing all page_contents dude
     page_contents = {
         0: Column(controls=[home_card,home_part2]),
+        1: qr_code_scanner(page,navbar,home_appbar,home_card,home_part2)[1],
         3: translation_page_column(page)
     }
 
     #function to set changed page
     def changedbro(e=None):
         page.controls.clear()
-        page.add(home_appbar,page_contents.get(page.navigation_bar.selected_index,Text("Coming Soon")))
-        if page.navigation_bar.selected_index!=0:
-            page.remove(home_appbar)
+        page.add(page_contents.get(page.navigation_bar.selected_index,Text("Coming Soon")))
         if page.navigation_bar.selected_index==3:
             page.add(translation_page_appbar())
+        if page.navigation_bar.selected_index==1:
+            page.appbar= qr_code_scanner(page,navbar,home_appbar,home_card,home_part2)[0]
+            page.padding=Padding(50,200,50,100)
+            page.bgcolor= "#000000"
+        else:
+            page.appbar = home_appbar
+            page.padding = 10
+            page.bgcolor = "#FFF0F0F0"
+            page.navigation_bar = navbar
+        if page.navigation_bar.selected_index!=0 and page.navigation_bar.selected_index!=1:
+            page.appbar = None
+        if page.navigation_bar.selected_index==1:
+            page.navigation_bar = None
         page.update()
 
     page.navigation_bar.on_change = changedbro
     page.add(home_appbar,home_card,home_part2) #default page - Home
-    #page.bgcolor = "#000000"
-    #temp = qr_code_scanner()
-    #page.add(temp[0])
-    #page.add(temp[1])
-    #page.add(Text("Hi bro !",color="#ffffff"))
     page.update()
 
 
-def qr_code_scanner():
+def qr_code_scanner(page,navbar,home_appbar,home_card,home_part2):
+
+    def close_scanning(e):
+        page.controls.clear()
+        page.navigation_bar = navbar
+        page.appbar = home_appbar
+        navbar.selected_index = 0
+        page.padding = 10
+        page.bgcolor = "#FFF0F0F0"
+        page.add(home_card,home_part2)
+        page.update()
     app_bar = AppBar(
-        leading=IconButton(Icons.CLOSE, icon_color="#ffffff"),
+        leading=IconButton(icons.CLOSE, icon_color="#ffffff",on_click=close_scanning),
         leading_width=50,
         center_title=False,
         bgcolor="#000000",
         actions=[
-            IconButton(Icons.INFO_OUTLINE, icon_color="#ffffff"),
-            IconButton(Icons.SETTINGS_ACCESSIBILITY_OUTLINED, icon_color="#ffffff")
+            IconButton(icons.INFO_OUTLINE, icon_color="#ffffff"),
+            IconButton(icons.SETTINGS_ACCESSIBILITY_OUTLINED, icon_color="#ffffff")
         ]
     )
 
-    new_cont = Container(
-        alignment=alignment.bottom_right,
-        gradient=LinearGradient(
-            begin=alignment.top_left,
-            end=Alignment(0.8, 1),
-            colors=[
-                "0xff1f005c",
-                "0xff5b0060",
-                "0xff870160",
-                "0xffac255e",
-                "0xffca485c",
-                "0xffe16b5c",
-                "0xfff39060",
-                "0xffffb56b",
-            ],
-            tile_mode=GradientTileMode.MIRROR,
-            rotation=math.pi / 3,
-        ),
-        width=150,
-        height=150,
-        border_radius=5
+    qr_scanner = Container(
+        width=250,
+        height=250,
+        border_radius=10,
+        border=border.all(4, "limegreen"),
+        bgcolor="black",
+        content=Image(src="profile.png")
     )
 
-    # Wrapping new_cont inside a Column for vertical centering
+    # Full-page layout with both vertical & horizontal centering
     centered_layout = Column(
-        controls=[Container(content=new_cont, alignment=alignment.center)],
-        alignment=CrossAxisAlignment.START,  # Centers content vertically
-        horizontal_alignment=CrossAxisAlignment.CENTER,
-        expand=True  # Allows column to take full space
+        controls=[
+            Row(
+                controls=[qr_scanner],
+                alignment=MainAxisAlignment.CENTER,  # Horizontal centering
+                expand=True
+            ),
+        ],
+        alignment=MainAxisAlignment.CENTER,  # Vertical centering
+        expand=True
     )
 
     return [app_bar, centered_layout]
-
 app(main)
