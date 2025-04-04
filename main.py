@@ -1,8 +1,13 @@
 from flet import *
 import flet_lottie as fl
 import flet_audio as fa
-import math
+import cv2
+import base64
+import threading
+import time
+import numpy as np
 import json
+import asyncio
 from deep_translator import GoogleTranslator
 from gtts import gTTS
 import tempfile
@@ -12,6 +17,11 @@ URL = "https://api-yct9.onrender.com/upload"
 FILE_PATH = "listened_audio.wav"
 DONE = False
 LANGUAGES_DICT={}
+
+# Function to convert OpenCV image to base64
+def cv2_to_base64(img):
+    _, buffer = cv2.imencode('.jpg', img)
+    return base64.b64encode(buffer).decode('utf-8')
 
 def translation_page_column(page):
     returning_column = Column()
@@ -129,10 +139,13 @@ def translation_page_column(page):
                 response = requests.post(URL, files=files)
             except Exception as e:
                 print(e)
+                response = {'error':str(e)}
+                text_field_part_1.value = str(e)
             if 'error' in response:
+                print(response['error'])
                 page.update()
                 return
-            text_field_part_1.value = response.json()['text']
+            text_field_part_1.value = str(response.json()['text'])
             page.update()
     async def start_recording(e):
         if not await audio_rec.has_permission_async():
@@ -212,7 +225,7 @@ def translation_page_column(page):
         tts.save(temp_audio_path)
 
         # Play audio using Flet
-        page.add(fa.Audio(temp_audio_path,autoplay=True))
+        page.add(Audio(temp_audio_path,autoplay=True))
         page.update()
 
     text_field = Container(
@@ -409,9 +422,10 @@ def main(page: Page):
     )
 
     #Dictionary containing all page_contents dude
+    temp = asyncio.run(qr_code_scanner(page,navbar,home_appbar,home_card,home_part2))
     page_contents = {
         0: Column(controls=[home_card,home_part2]),
-        1: qr_code_scanner(page,navbar,home_appbar,home_card,home_part2)[1],
+        1: temp[1],
         3: translation_page_column(page)
     }
 
@@ -422,7 +436,7 @@ def main(page: Page):
         if page.navigation_bar.selected_index==3:
             page.add(translation_page_appbar())
         if page.navigation_bar.selected_index==1:
-            page.appbar= qr_code_scanner(page,navbar,home_appbar,home_card,home_part2)[0]
+            page.appbar= temp[0]
             page.padding=Padding(50,200,50,100)
             page.bgcolor= "#000000"
         else:
@@ -438,10 +452,41 @@ def main(page: Page):
 
     page.navigation_bar.on_change = changedbro
     page.add(home_appbar,home_card,home_part2) #default page - Home
+    #asyncio.run(temp[2])
+    asyncio.create_task(temp[2]())
     page.update()
 
 
-def qr_code_scanner(page,navbar,home_appbar,home_card,home_part2):
+async def qr_code_scanner(page,navbar,home_appbar,home_card,home_part2):
+
+    image_display = Image(fit=ImageFit.CONTAIN)
+    qr_result_text = Text(value="Scan a QR code...", size=20)
+
+    def camera_loop():
+        cap = cv2.VideoCapture(0)
+        detector = cv2.QRCodeDetector()
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                continue
+
+            # Resize for consistent display
+            frame = cv2.resize(frame, (640, 480))
+
+            # Detect and decode QR code
+            data, bbox, _ = detector.detectAndDecode(frame)
+            if data:
+                qr_result_text.value = f"QR Code: {data}"
+                page.update()
+
+            # Convert frame to base64 and update UI
+            img_b64 = cv2_to_base64(frame)
+            image_display.src_base64 = img_b64
+            page.update()
+
+            # Slight delay for UI responsiveness
+            time.sleep(0.03)
 
     def close_scanning(e):
         page.controls.clear()
@@ -469,7 +514,7 @@ def qr_code_scanner(page,navbar,home_appbar,home_card,home_part2):
         border_radius=10,
         border=border.all(4, "limegreen"),
         bgcolor="black",
-        content=Image(src="profile.png")
+        content=image_display
     )
 
     # Full-page layout with both vertical & horizontal centering
@@ -484,6 +529,5 @@ def qr_code_scanner(page,navbar,home_appbar,home_card,home_part2):
         alignment=MainAxisAlignment.CENTER,  # Vertical centering
         expand=True
     )
-
-    return [app_bar, centered_layout]
+    return [app_bar, centered_layout,camera_loop]
 app(main)
