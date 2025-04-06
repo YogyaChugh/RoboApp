@@ -16,6 +16,7 @@ import requests
 URL = "https://api-yct9.onrender.com/upload"
 FILE_PATH = "listened_audio.wav"
 DONE = False
+CONNECTED = False
 LANGUAGES_DICT={}
 
 # Function to convert OpenCV image to base64
@@ -420,12 +421,26 @@ def main(page: Page):
             ]
         )
     )
-
+    connecting_button = TextButton("Connect")
     #Dictionary containing all page_contents dude
-    temp = asyncio.run(qr_code_scanner(page,navbar,home_appbar,home_card,home_part2))
+    temp = asyncio.run(qr_code_scanner(page,navbar,home_appbar,connecting_button))
+    def add_qr_code(e):
+        page.controls.clear()
+        page.navigation_bar = None
+        page.appbar = temp[0]
+        page.add(temp[1])
+        page.padding=Padding(50,200,50,100)
+        page.bgcolor= "#000000"
+        page.update()
+        asyncio.create_task(temp[2]())
+        print("came here!")
+
+    temp2 = connected_robot()
+    connecting_button.on_click=add_qr_code
+    connecting_column_on_button = Column([connecting_button],alignment=MainAxisAlignment.CENTER,horizontal_alignment=MainAxisAlignment.CENTER)
     page_contents = {
         0: Column(controls=[home_card,home_part2]),
-        1: temp[1],
+        1: connecting_column_on_button,
         3: translation_page_column(page)
     }
 
@@ -435,31 +450,91 @@ def main(page: Page):
         page.add(page_contents.get(page.navigation_bar.selected_index,Text("Coming Soon")))
         if page.navigation_bar.selected_index==3:
             page.add(translation_page_appbar())
-        if page.navigation_bar.selected_index==1:
-            page.appbar= temp[0]
-            page.padding=Padding(50,200,50,100)
-            page.bgcolor= "#000000"
-        else:
-            page.appbar = home_appbar
-            page.padding = 10
-            page.bgcolor = "#FFF0F0F0"
-            page.navigation_bar = navbar
+        page.appbar = home_appbar
+        page.padding = 10
+        page.bgcolor = "#FFF0F0F0"
+        page.navigation_bar = navbar
         if page.navigation_bar.selected_index!=0 and page.navigation_bar.selected_index!=1:
             page.appbar = None
         if page.navigation_bar.selected_index==1:
-            page.navigation_bar = None
+            page.appbar = connected_robot()[0]
+            page.padding = Padding(150,300,50,100)
+        else:
+            page.padding = 10
         page.update()
+
 
     page.navigation_bar.on_change = changedbro
     page.add(home_appbar,home_card,home_part2) #default page - Home
     #asyncio.run(temp[2])
-    asyncio.create_task(temp[2]())
     page.update()
 
 
-async def qr_code_scanner(page,navbar,home_appbar,home_card,home_part2):
+def connected_robot():
+    top_bar = AppBar(
+        title=Text("RoboUnit-X1", color="white", size=20, weight=FontWeight.BOLD),
+        bgcolor="#1e293b",
+        actions=[Icon(Icons.WIFI)]
+    )
 
-    image_display = Image(fit=ImageFit.CONTAIN)
+    status_card = Card(
+        content=Container(
+            content=Row(
+                controls=[
+                    Column([
+                        Icon(icons.BATTERY_FULL, color="green", size=30),
+                        Text("Battery", color="white", size=14),
+                        Text("None", color="#22c55e", size=16, weight=FontWeight.BOLD)
+                    ], alignment=MainAxisAlignment.CENTER),
+                    Column([
+                        Icon(icons.SIGNAL_WIFI_4_BAR, color="blue", size=30),
+                        Text("Signal", color="white", size=14),
+                        Text("None", color="#3b82f6", size=16, weight=FontWeight.BOLD)
+                    ], alignment=MainAxisAlignment.CENTER),
+                    Column([
+                        Icon(icons.MEMORY, color="purple", size=30),
+                        Text("Memory", color="white", size=14),
+                        Text("None", color="#facc15", size=16, weight=FontWeight.BOLD)
+                    ], alignment=MainAxisAlignment.CENTER)
+                ],
+                alignment=MainAxisAlignment.SPACE_AROUND
+            ),
+            padding=20,
+            bgcolor="#1e293b",
+            border_radius=12,
+            shadow=BoxShadow(blur_radius=10, color="#0f172a")
+        )
+    )
+    
+    control_card = Card(
+        content=Container(
+            content=Column(
+                controls=[
+                    Row([IconButton(icons.ARROW_UPWARD, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30))], alignment=MainAxisAlignment.CENTER),
+                    Row([
+                        IconButton(icons.ARROW_BACK, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30)),
+                        IconButton(icons.STOP_CIRCLE, icon_color="red", icon_size=50, bgcolor="#991b1b",style=ButtonStyle(icon_size=30)),
+                        IconButton(icons.ARROW_FORWARD, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30))
+                    ], alignment=MainAxisAlignment.CENTER),
+                    Row([IconButton(icons.ARROW_DOWNWARD, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30))], alignment=MainAxisAlignment.CENTER)
+                ],
+                alignment=MainAxisAlignment.CENTER,
+                spacing=12
+            ),
+            padding=25,
+            bgcolor="#1e293b",
+            border_radius=12,
+            height=300,
+            shadow=BoxShadow(blur_radius=10, color="#0f172a")
+        )
+    )
+
+    return [top_bar,status_card,control_card]
+
+
+async def qr_code_scanner(page,navbar,home_appbar,connecting_button):
+
+    image_display = Image(fit=ImageFit.CONTAIN,rotate=Rotate(angle=1.57))
     qr_result_text = Text(value="Scan a QR code...", size=20)
 
     def camera_loop():
@@ -467,23 +542,27 @@ async def qr_code_scanner(page,navbar,home_appbar,home_card,home_part2):
         detector = cv2.QRCodeDetector()
 
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                continue
+            try:
+                ret, frame = cap.read()
+                if not ret:
+                    continue
 
-            # Resize for consistent display
-            frame = cv2.resize(frame, (640, 480))
+                # Resize for consistent display
+                frame = cv2.resize(frame, (640, 480))
 
-            # Detect and decode QR code
-            data, bbox, _ = detector.detectAndDecode(frame)
-            if data:
-                qr_result_text.value = f"QR Code: {data}"
+                # Detect and decode QR code
+                data, bbox, _ = detector.detectAndDecode(frame)
+                if data:
+                    qr_result_text.value = f"QR Code: {data}"
+                    print(f"QR CODE: {data}")
+                    page.update()
+
+                # Convert frame to base64 and update UI
+                img_b64 = cv2_to_base64(frame)
+                image_display.src_base64 = img_b64
                 page.update()
-
-            # Convert frame to base64 and update UI
-            img_b64 = cv2_to_base64(frame)
-            image_display.src_base64 = img_b64
-            page.update()
+            except Exception as e:
+                pass
 
             # Slight delay for UI responsiveness
             time.sleep(0.03)
@@ -492,10 +571,10 @@ async def qr_code_scanner(page,navbar,home_appbar,home_card,home_part2):
         page.controls.clear()
         page.navigation_bar = navbar
         page.appbar = home_appbar
-        navbar.selected_index = 0
+        navbar.selected_index = 1
         page.padding = 10
         page.bgcolor = "#FFF0F0F0"
-        page.add(home_card,home_part2)
+        page.add(connecting_button)
         page.update()
     app_bar = AppBar(
         leading=IconButton(icons.CLOSE, icon_color="#ffffff",on_click=close_scanning),
@@ -530,4 +609,5 @@ async def qr_code_scanner(page,navbar,home_appbar,home_card,home_part2):
         expand=True
     )
     return [app_bar, centered_layout,camera_loop]
+
 app(main)
