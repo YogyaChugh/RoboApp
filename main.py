@@ -1,11 +1,8 @@
 from flet import *
 import flet_lottie as fl
-import flet_audio as fa
 import cv2
 import base64
-import threading
 import time
-import numpy as np
 import json
 import asyncio
 from deep_translator import GoogleTranslator
@@ -236,10 +233,6 @@ def translation_page_column(page):
                 Divider(height=20, thickness=2, color="grey"),
                 Row(
                     [
-                        Row(
-                            [mic_start],
-                            tight=True
-                        ),
                         ElevatedButton("Translate",style=ButtonStyle(color="#ffffff",bgcolor="#000055",padding=Padding(10,10,10,10)),on_click=process_translate)
                     ],
                     alignment=MainAxisAlignment.SPACE_BETWEEN  # Ensures left & right positioning
@@ -270,11 +263,6 @@ def translation_page_column(page):
         padding=8,
         bgcolor="#ffffff"
     )
-
-    audio_rec = AudioRecorder(
-        audio_encoder=AudioEncoder.WAV
-    )
-    page.overlay.append(audio_rec)
     page.update()
 
     returning_column.controls.append(centered_layout)
@@ -299,6 +287,8 @@ def main(page: Page):
     page.on_scroll_interval = 10
     page.adaptive = True
     page.bgcolor = "#FFF0F0F0"
+    page.window.width = 450
+    page.window.height = 822
 
     #Main Top Bar
     home_appbar = AppBar(
@@ -482,17 +472,17 @@ def connected_robot():
             content=Row(
                 controls=[
                     Column([
-                        Icon(icons.BATTERY_FULL, color="green", size=30),
+                        Icon(Icons.BATTERY_FULL, color="green", size=30),
                         Text("Battery", color="white", size=14),
                         Text("None", color="#22c55e", size=16, weight=FontWeight.BOLD)
                     ], alignment=MainAxisAlignment.CENTER),
                     Column([
-                        Icon(icons.SIGNAL_WIFI_4_BAR, color="blue", size=30),
+                        Icon(Icons.SIGNAL_WIFI_4_BAR, color="blue", size=30),
                         Text("Signal", color="white", size=14),
                         Text("None", color="#3b82f6", size=16, weight=FontWeight.BOLD)
                     ], alignment=MainAxisAlignment.CENTER),
                     Column([
-                        Icon(icons.MEMORY, color="purple", size=30),
+                        Icon(Icons.MEMORY, color="purple", size=30),
                         Text("Memory", color="white", size=14),
                         Text("None", color="#facc15", size=16, weight=FontWeight.BOLD)
                     ], alignment=MainAxisAlignment.CENTER)
@@ -510,13 +500,13 @@ def connected_robot():
         content=Container(
             content=Column(
                 controls=[
-                    Row([IconButton(icons.ARROW_UPWARD, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30))], alignment=MainAxisAlignment.CENTER),
+                    Row([IconButton(Icons.ARROW_UPWARD, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30))], alignment=MainAxisAlignment.CENTER),
                     Row([
-                        IconButton(icons.ARROW_BACK, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30)),
-                        IconButton(icons.STOP_CIRCLE, icon_color="red", icon_size=50, bgcolor="#991b1b",style=ButtonStyle(icon_size=30)),
-                        IconButton(icons.ARROW_FORWARD, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30))
+                        IconButton(Icons.ARROW_BACK, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30)),
+                        IconButton(Icons.STOP_CIRCLE, icon_color="red", icon_size=50, bgcolor="#991b1b",style=ButtonStyle(icon_size=30)),
+                        IconButton(Icons.ARROW_FORWARD, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30))
                     ], alignment=MainAxisAlignment.CENTER),
-                    Row([IconButton(icons.ARROW_DOWNWARD, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30))], alignment=MainAxisAlignment.CENTER)
+                    Row([IconButton(Icons.ARROW_DOWNWARD, icon_color="white", bgcolor="#334155",style=ButtonStyle(icon_size=30))], alignment=MainAxisAlignment.CENTER)
                 ],
                 alignment=MainAxisAlignment.CENTER,
                 spacing=12
@@ -577,13 +567,13 @@ async def qr_code_scanner(page,navbar,home_appbar,connecting_button):
         page.add(connecting_button)
         page.update()
     app_bar = AppBar(
-        leading=IconButton(icons.CLOSE, icon_color="#ffffff",on_click=close_scanning),
+        leading=IconButton(Icons.CLOSE, icon_color="#ffffff",on_click=close_scanning),
         leading_width=50,
         center_title=False,
         bgcolor="#000000",
         actions=[
-            IconButton(icons.INFO_OUTLINE, icon_color="#ffffff"),
-            IconButton(icons.SETTINGS_ACCESSIBILITY_OUTLINED, icon_color="#ffffff")
+            IconButton(Icons.INFO_OUTLINE, icon_color="#ffffff"),
+            IconButton(Icons.SETTINGS_ACCESSIBILITY_OUTLINED, icon_color="#ffffff")
         ]
     )
 

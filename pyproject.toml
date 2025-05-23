@@ -1,6 +1,3 @@
-[tool.flet.splash]
-android = false
-
 [project]
 name = "RoboChan"
 version = "1.0.0"
@@ -9,6 +6,12 @@ authors = [
   {name = "Yogya Chugh", email = "yogya.developer@gmail.com"}
 ]
 
+[tool.flet]
+assets = ["assets/logo.png"]
+
 [tool.flet.android]
-adaptive_icon_background = "assets/logo.jpg" # --android-adaptive-icon-background
-split_per_abi = false # --split-per-abi
+adaptive_icon_background = "C:/Users/Lenovo/OneDrive/Desktop/MyFirstProject/RoboApp/assets/logo.png"
+split_per_abi = false
+
+[tool.flet.splash]
+android = false

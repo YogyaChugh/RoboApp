@@ -1,3 +1,7 @@
 flet
-googletrans==4.0.0rc1
+flet-lottie
+flet-audio
 gTTs
+deep-translator
+opencv-python
+certifi
